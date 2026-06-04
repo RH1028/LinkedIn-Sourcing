@@ -7,7 +7,8 @@
 | 決策 | 選擇 | 理由 |
 |---|---|---|
 | Backend | Apps Script + Google Sheet（獨立 Sheet） | 重用 recruit-dashboard 經驗、零部署成本、5 人量級綽綽有餘 |
-| 認證 | 重用 recruit-dashboard 三級權限模式（明碼密碼、Users 分頁） | 一致學習曲線、新人只要加一行 |
+| 認證 | 明碼密碼、Users 分頁。**兩級權限：`user` / `admin`**（不是 recruit-dashboard 那套三級） | 工具型系統：成員都該能跑全流程，只有 owner 需要 admin |
+| 資料可見性 | **共用工作區**：所有 user 看得到所有 jobs / candidates / rubrics | 真實 sourcing 是團隊協作場景，不是個人記事本 |
 | 評分 | **AI（LLM）動態評分**，rubric 文字存在 Job、可學習 | 不寫死規則、每個 JD 客製、使用者 feedback 會更新 rubric |
 | 評分 UI | 內部 0–100、UI 顯示 5 星（每 20 分一顆） | 簡單直觀 |
 | Rubric 重算 | 預設不自動，給「重算所有人」按鈕 | 使用者控制 |
@@ -27,7 +28,7 @@
 |---|---|---|
 | `account` | string | 使用者代號（與 LinkedIn 帳號無關，純識別） |
 | `password` | string | 明碼，管理者在 Sheet 直接編 |
-| `role` | enum | `viewer` / `editor` / `admin` |
+| `role` | enum | `user`（預設、可跑全工作流）/ `admin`（同 user + 管 Users 分頁）|
 | `name` | string | 顯示用 |
 | `active` | enum | `yes` / `no` |
 | `created_at` | datetime | ISO 8601 |
@@ -138,36 +139,36 @@
 
 | Method | Endpoint | 角色 | Payload | 回應 |
 |---|---|---|---|---|
-| GET | `?action=listJobs&pw=` | viewer+ | — | `{ ok, jobs }` |
-| GET | `?action=getJob&pw=&id=` | viewer+ | — | `{ ok, job, stats }` |
-| POST | `?action=createJob&pw=` | editor+ | `{ brief }` | `{ ok, id, jd_text, filter_*, scoring_rubric }` — **後端 call LLM 產 JD + filter + rubric** |
-| POST | `?action=updateJob&pw=` | editor+ | `{ id, ...partial }` | `{ ok }` |
+| GET | `?action=listJobs&pw=` | user+ | — | `{ ok, jobs }` |
+| GET | `?action=getJob&pw=&id=` | user+ | — | `{ ok, job, stats }` |
+| POST | `?action=createJob&pw=` | user+ | `{ brief }` | `{ ok, id, jd_text, filter_*, scoring_rubric }` — **後端 call LLM 產 JD + filter + rubric** |
+| POST | `?action=updateJob&pw=` | user+ | `{ id, ...partial }` | `{ ok }` |
 
 ### Candidates
 
 | Method | Endpoint | 角色 | Payload | 回應 |
 |---|---|---|---|---|
-| GET | `?action=listCandidates&pw=&job_id=&status=&limit=&offset=` | viewer+ | — | `{ ok, candidates, total }` |
-| POST | `?action=upsertCandidates&pw=` | editor+ | `{ job_id, candidates: ExtractedCandidate[] }` | `{ ok, added, updated, skipped }` — **後端對每筆新候選人 (1) lookup dashboard (2) call LLM 評分** |
-| POST | `?action=updateCandidateStatus&pw=` | editor+ | `{ id, status, note? }` | `{ ok }` |
-| POST | `?action=handoffCandidate&pw=` | editor+ | `{ id }` | `{ ok, dashboard_response }` |
+| GET | `?action=listCandidates&pw=&job_id=&status=&limit=&offset=` | user+ | — | `{ ok, candidates, total }` |
+| POST | `?action=upsertCandidates&pw=` | user+ | `{ job_id, candidates: ExtractedCandidate[] }` | `{ ok, added, updated, skipped }` — **後端對每筆新候選人 (1) lookup dashboard (2) call LLM 評分** |
+| POST | `?action=updateCandidateStatus&pw=` | user+ | `{ id, status, note? }` | `{ ok }` |
+| POST | `?action=handoffCandidate&pw=` | user+ | `{ id }` | `{ ok, dashboard_response }` |
 
 ### Rubric（AI 評分準則學習）
 
 | Method | Endpoint | 角色 | Payload | 回應 |
 |---|---|---|---|---|
-| GET | `?action=getRubric&pw=&job_id=` | viewer+ | — | `{ ok, rubric, version, history: RubricFeedback[] }` |
-| POST | `?action=refineRubric&pw=` | editor+ | `{ job_id, feedback_text, referenced_candidate_id? }` | `{ ok, rubric_before, rubric_after, version }` — **call LLM 把 feedback 吃進去、更新 rubric、寫 RubricFeedback** |
-| POST | `?action=updateRubric&pw=` | editor+ | `{ job_id, rubric }` | `{ ok, version }` — **使用者手動編 rubric** |
-| POST | `?action=rescoreAll&pw=` | editor+ | `{ job_id }` | `{ ok, scored_count }` — **用最新 rubric 重算所有候選人** |
+| GET | `?action=getRubric&pw=&job_id=` | user+ | — | `{ ok, rubric, version, history: RubricFeedback[] }` |
+| POST | `?action=refineRubric&pw=` | user+ | `{ job_id, feedback_text, referenced_candidate_id? }` | `{ ok, rubric_before, rubric_after, version }` — **call LLM 把 feedback 吃進去、更新 rubric、寫 RubricFeedback** |
+| POST | `?action=updateRubric&pw=` | user+ | `{ job_id, rubric }` | `{ ok, version }` — **使用者手動編 rubric** |
+| POST | `?action=rescoreAll&pw=` | user+ | `{ job_id }` | `{ ok, scored_count }` — **用最新 rubric 重算所有候選人** |
 
 ### Schedule
 
 | Method | Endpoint | 角色 | Payload | 回應 |
 |---|---|---|---|---|
-| GET | `?action=getSchedule&pw=` | viewer+ | — | `{ ok, config }` |
-| POST | `?action=updateSchedule&pw=` | editor+ | `{ ...fields }` | `{ ok }` |
-| GET | `?action=getActiveJob&pw=` | viewer+ | — | Extension 用：「現在我該跑哪個 job？」回 `{ ok, job, next_run_at }` |
+| GET | `?action=getSchedule&pw=` | user+ | — | `{ ok, config }` |
+| POST | `?action=updateSchedule&pw=` | user+ | `{ ...fields }` | `{ ok }` |
+| GET | `?action=getActiveJob&pw=` | user+ | — | Extension 用：「現在我該跑哪個 job？」回 `{ ok, job, next_run_at }` |
 
 ### 形狀定義
 

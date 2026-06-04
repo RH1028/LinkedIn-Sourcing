@@ -41,6 +41,10 @@ const SHEET_SCHEMA = {
   ],
 };
 
+// Role model is flat / SaaS-style:
+//   - 'user'  → default for everyone, full sourcing workflow
+//   - 'admin' → only the tool owner; same as user PLUS manage Users sheet
+// When adding teammates by hand in the Users sheet, set role = 'user'.
 const DEFAULT_ADMIN = {
   account: 'rita',
   password: 'admin1234',

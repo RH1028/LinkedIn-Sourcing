@@ -94,10 +94,14 @@ function authenticate(pw) {
 }
 
 function requireRole(user, minRole) {
-  const order = { viewer: 0, editor: 1, admin: 2 };
-  if ((order[user.role] || -1) < order[minRole]) {
-    throw new Error('requires ' + minRole + ' role; you are ' + user.role);
-  }
+  // Two-level model: user (default for everyone) → admin (only the owner).
+  // Anything sourcing-workflow related is open to user+; admin is reserved
+  // for managing the Users sheet etc.
+  const order = { user: 0, admin: 1 };
+  const have = order[user.role];
+  const need = order[minRole];
+  if (have === undefined) throw new Error('unknown role: ' + user.role);
+  if (have < need) throw new Error('requires ' + minRole + ' role; you are ' + user.role);
 }
 
 // ====================================================================
@@ -138,19 +142,15 @@ function nowIso() {
 // ====================================================================
 
 function apiListJobs(user) {
+  // Shared workspace: all authenticated users see all jobs.
+  // owner_account is kept on each row for "who created this" info only.
   const all = readSheet('Jobs');
-  const visible = user.role === 'admin'
-    ? all
-    : all.filter((j) => j.owner_account === user.account);
-  return { ok: true, jobs: visible };
+  return { ok: true, jobs: all };
 }
 
 function apiGetJob(user, payload) {
   const job = readSheet('Jobs').find((j) => j.id === payload.id);
   if (!job) throw new Error('job not found');
-  if (user.role !== 'admin' && job.owner_account !== user.account) {
-    throw new Error('forbidden');
-  }
   const candidates = readSheet('Candidates').filter((c) => c.job_id === job.id);
   const byStatus = {};
   for (const c of candidates) {
@@ -161,7 +161,7 @@ function apiGetJob(user, payload) {
 }
 
 function apiCreateJob(user, payload) {
-  requireRole(user, 'editor');
+  requireRole(user, 'user');
   if (!payload.brief) throw new Error('brief is required');
 
   const ai = llmGenerateJobAssets(payload.brief);
@@ -207,7 +207,7 @@ function apiListCandidates(user, payload) {
 }
 
 function apiUpsertCandidates(user, payload) {
-  requireRole(user, 'editor');
+  requireRole(user, 'user');
   const jobId = payload.job_id;
   if (!jobId) throw new Error('job_id is required');
   const job = readSheet('Jobs').find((j) => j.id === jobId);
@@ -402,7 +402,7 @@ function updateCandidateRow(candidateId, updates) {
 // ====================================================================
 
 function apiUpdateCandidateStatus(user, payload) {
-  requireRole(user, 'editor');
+  requireRole(user, 'user');
   if (!payload.id) throw new Error('id is required');
   if (!payload.status) throw new Error('status is required');
   updateCandidateRow(payload.id, {
@@ -421,9 +421,6 @@ function apiUpdateCandidateStatus(user, payload) {
 function apiGetRubric(user, payload) {
   const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
   if (!job) throw new Error('job not found');
-  if (user.role !== 'admin' && job.owner_account !== user.account) {
-    throw new Error('forbidden');
-  }
   const history = readSheet('RubricFeedback')
     .filter(function (f) { return f.job_id === payload.job_id; })
     .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
@@ -437,7 +434,7 @@ function apiGetRubric(user, payload) {
 }
 
 function apiRefineRubric(user, payload) {
-  requireRole(user, 'editor');
+  requireRole(user, 'user');
   if (!payload.feedback_text) throw new Error('feedback_text is required');
   const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
   if (!job) throw new Error('job not found');
@@ -478,7 +475,7 @@ function apiRefineRubric(user, payload) {
 }
 
 function apiUpdateRubric(user, payload) {
-  requireRole(user, 'editor');
+  requireRole(user, 'user');
   if (payload.rubric === undefined) throw new Error('rubric is required');
   const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
   if (!job) throw new Error('job not found');
@@ -509,7 +506,7 @@ function apiUpdateRubric(user, payload) {
 }
 
 function apiRescoreAll(user, payload) {
-  requireRole(user, 'editor');
+  requireRole(user, 'user');
   const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
   if (!job) throw new Error('job not found');
 
