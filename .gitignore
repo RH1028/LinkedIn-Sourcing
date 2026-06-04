@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# 候選人個資不入 repo（保護隱私 + ToS）
+scraped/
+
+# Node / build artifacts (when UI/Extension 開始開發後生效)
+node_modules/
+dist/
+build/
+*.log
+
+# Local env / secrets
+.env
+.env.local
+*.key
+
+# IDE
+.vscode/
+.idea/
