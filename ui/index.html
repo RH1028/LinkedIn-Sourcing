@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LinkedIn Sourcing</title>
+<style>
+:root {
+  --primary: #1a73e8;
+  --primary-dark: #1557b0;
+  --text: #202124;
+  --text-muted: #5f6368;
+  --bg: #f8f9fa;
+  --surface: #fff;
+  --border: #e8eaed;
+  --success: #1e8e3e;
+  --warning: #f29900;
+  --danger: #d93025;
+  --star: #f4b400;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "微軟正黑體", sans-serif; color: var(--text); background: var(--bg); }
+button { font-family: inherit; cursor: pointer; }
+
+/* ---- Setup / Login ---- */
+.gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.gate-card { background: var(--surface); padding: 40px; border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.08); width: 420px; max-width: 92vw; }
+.gate-card h1 { margin: 0 0 8px; font-size: 20px; color: var(--primary); }
+.gate-card .desc { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+.gate-card label { display: block; font-size: 12px; color: var(--text-muted); margin-top: 14px; margin-bottom: 4px; }
+.gate-card input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; }
+.gate-card input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.gate-card .btn-primary { width: 100%; padding: 11px; margin-top: 18px; background: var(--primary); color: white; border: 0; border-radius: 6px; font-size: 14px; font-weight: 600; }
+.gate-card .btn-primary:hover { background: var(--primary-dark); }
+.gate-card .err { color: var(--danger); font-size: 13px; margin-top: 12px; min-height: 18px; }
+
+/* ---- App layout ---- */
+header.app-header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+}
+header.app-header h1 { font-size: 16px; margin: 0; color: var(--primary); font-weight: 700; }
+header.app-header .me { color: var(--text-muted); font-size: 13px; display: flex; align-items: center; gap: 10px; }
+header.app-header button.linkish { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 13px; }
+header.app-header button.linkish:hover { color: var(--primary); }
+
+.layout { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 49px); }
+aside.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; }
+aside.sidebar .new-btn {
+  width: 100%; padding: 9px; background: var(--primary); color: white;
+  border: 0; border-radius: 6px; font-weight: 600; font-size: 13px;
+}
+aside.sidebar .new-btn:hover { background: var(--primary-dark); }
+aside.sidebar h3 { font-size: 11px; text-transform: uppercase; color: var(--text-muted); margin: 20px 0 8px; letter-spacing: 0.5px; }
+aside.sidebar .job-item {
+  padding: 10px 12px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; margin-bottom: 4px; line-height: 1.4;
+}
+aside.sidebar .job-item:hover { background: var(--bg); }
+aside.sidebar .job-item.active { background: #e8f0fe; color: var(--primary); font-weight: 600; }
+aside.sidebar .job-item .meta { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
+
+main.workspace { padding: 24px 32px; overflow-y: auto; max-height: calc(100vh - 49px); }
+.empty { color: var(--text-muted); text-align: center; margin-top: 80px; }
+.empty p { font-size: 14px; }
+
+.job-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 18px; }
+.job-header h2 { margin: 0 0 6px; font-size: 22px; }
+.job-header .meta { color: var(--text-muted); font-size: 13px; display: flex; gap: 12px; flex-wrap: wrap; }
+.job-header .meta span { display: inline-flex; align-items: center; gap: 4px; }
+.chip { display: inline-block; padding: 3px 8px; background: var(--bg); border-radius: 12px; font-size: 11px; color: var(--text-muted); margin-right: 4px; }
+
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+.section h3 { margin: 0 0 12px; font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.section h3 .right { float: right; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.section.collapsible h3 { cursor: pointer; }
+.section.collapsible.collapsed .body { display: none; }
+.section pre { white-space: pre-wrap; font-family: inherit; margin: 0; line-height: 1.7; font-size: 13px; color: var(--text); }
+.section textarea { width: 100%; min-height: 200px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; resize: vertical; }
+
+.cand-list { display: flex; flex-direction: column; gap: 10px; }
+.cand { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.cand-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.cand-info { flex: 1; min-width: 0; }
+.cand-name { font-size: 15px; font-weight: 600; margin: 0; }
+.cand-name a { color: inherit; text-decoration: none; }
+.cand-name a:hover { color: var(--primary); }
+.cand-sub { color: var(--text-muted); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+.stars { color: var(--star); font-size: 14px; white-space: nowrap; }
+.stars .num { color: var(--text-muted); font-size: 11px; margin-left: 4px; }
+.cand-reason { background: var(--bg); padding: 8px 10px; border-radius: 6px; font-size: 12px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+.cand-flags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.cand-flag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; font-size: 11px; border-radius: 10px;
+}
+.cand-flag.warn { background: #fef7e0; color: #8a6500; }
+.cand-flag.good { background: #e6f4ea; color: #137333; }
+.cand-flag.muted { background: #f0f0f0; color: var(--text-muted); }
+.cand-actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.cand-actions button {
+  padding: 6px 12px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+}
+.cand-actions button:hover { background: var(--bg); }
+.cand-actions button.ok { border-color: var(--success); color: var(--success); }
+.cand-actions button.bad { border-color: var(--danger); color: var(--danger); }
+.cand-actions button.tellai { border-color: var(--warning); color: #8a6500; }
+.cand-actions button.disabled { opacity: 0.5; pointer-events: none; }
+.cand.status-shortlisted { border-left: 3px solid var(--success); }
+.cand.status-rejected { opacity: 0.5; }
+.cand.status-contacted { border-left: 3px solid var(--primary); }
+
+.cand-status-pill {
+  display: inline-block; padding: 2px 8px; font-size: 11px; border-radius: 10px;
+  background: var(--bg); color: var(--text-muted);
+}
+.cand-status-pill.new { background: #e3f2fd; color: #0d47a1; }
+.cand-status-pill.shortlisted { background: #e6f4ea; color: #1e8e3e; }
+.cand-status-pill.contacted { background: #fff3e0; color: #e65100; }
+.cand-status-pill.rejected { background: #fce8e6; color: var(--danger); }
+
+/* ---- Rubric chat ---- */
+.rubric-area { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1000px) { .rubric-area { grid-template-columns: 1fr; } }
+.feedback-input { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; }
+.btn { padding: 8px 14px; border: 0; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-ghost { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.btn-ghost:hover { background: var(--bg); }
+.btn-warn { background: var(--warning); color: white; }
+.btn-warn:hover { background: #d68b00; }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.btn:disabled, .btn.loading { opacity: 0.6; cursor: wait; }
+
+.history-list { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; margin-top: 10px; }
+.history-item { padding: 8px 10px; background: var(--bg); border-radius: 6px; font-size: 12px; }
+.history-item .when { color: var(--text-muted); font-size: 11px; }
+
+/* ---- Modal ---- */
+.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: var(--surface); padding: 28px; border-radius: 12px; width: 600px; max-width: 92vw; max-height: 88vh; overflow-y: auto; }
+.modal h2 { margin: 0 0 6px; font-size: 18px; }
+.modal .desc { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
+.modal textarea { width: 100%; min-height: 160px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.modal .err { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
+
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #323232; color: white; padding: 10px 18px; border-radius: 6px;
+  font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); z-index: 2000;
+  opacity: 0; transition: opacity 0.2s;
+}
+.toast.show { opacity: 1; }
+.toast.err { background: var(--danger); }
+</style>
+</head>
+<body>
+
+<!-- ====== Setup (first run) ====== -->
+<div id="setup" class="gate" style="display:none">
+  <div class="gate-card">
+    <h1>LinkedIn Sourcing</h1>
+    <p class="desc">第一次使用：填入後端 Apps Script 部署網址跟密碼。</p>
+    <label>後端 API URL</label>
+    <input id="setup-url" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>密碼</label>
+    <input id="setup-pw" type="password" placeholder="(管理者預設 admin1234)">
+    <button class="btn-primary" id="setup-go">登入</button>
+    <div class="err" id="setup-err"></div>
+  </div>
+</div>
+
+<!-- ====== App ====== -->
+<div id="app" style="display:none">
+  <header class="app-header">
+    <h1>LinkedIn Sourcing</h1>
+    <div class="me">
+      <span id="me-name"></span>
+      <button class="linkish" id="btn-settings">設定</button>
+      <button class="linkish" id="btn-logout">登出</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <button class="new-btn" id="new-job-btn">+ 新增職缺</button>
+      <h3>我的職缺</h3>
+      <div id="job-list-container"></div>
+    </aside>
+
+    <main class="workspace" id="workspace">
+      <div class="empty">
+        <p>左側選一個職缺、或按「+ 新增職缺」開始。</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ====== New job modal ====== -->
+<div id="new-job-modal" class="modal-back" style="display:none">
+  <div class="modal">
+    <h2>新增職缺</h2>
+    <p class="desc">輸入你心中的「職務輪廓」（簡短即可），AI 會自動產出完整 JD、LinkedIn 搜尋條件、評分準則。</p>
+    <textarea id="new-job-brief" placeholder="例：資深人才招募，5 年以上經驗，要有科技軟體業招募背景、AI Agent 工具使用經驗、從 0 到 1 招募專案落地，加分項：能 vibe coding 做 AI workflow"></textarea>
+    <div class="err" id="new-job-err"></div>
+    <div class="actions">
+      <button class="btn btn-ghost" id="new-job-cancel">取消</button>
+      <button class="btn btn-primary" id="new-job-submit">送出（AI 產出中需 5~15 秒）</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ====== Config ======
+const CFG_KEY = 'ls_cfg_v1';
+let cfg = null;
+let currentUser = null;
+let currentJobId = null;
+let currentJob = null;
+
+// ====== Helpers ======
+function $(id) { return document.getElementById(id); }
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'html') e.innerHTML = attrs[k];
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  if (children) for (const c of [].concat(children)) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.toggle('err', !!isErr);
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function () { t.classList.remove('show'); }, 2800);
+}
+
+// ====== API ======
+async function api(action, params) {
+  if (!cfg) throw new Error('no config');
+  const url = new URL(cfg.apiUrl);
+  url.searchParams.set('action', action);
+  url.searchParams.set('pw', cfg.pw);
+  if (params) for (const k in params) url.searchParams.set(k, params[k]);
+  const res = await fetch(url.toString(), { method: 'GET' });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'unknown error');
+  return j;
+}
+async function apiPost(action, body) {
+  if (!cfg) throw new Error('no config');
+  const url = new URL(cfg.apiUrl);
+  url.searchParams.set('action', action);
+  url.searchParams.set('pw', cfg.pw);
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body || {}),
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || 'unknown error');
+  return j;
+}
+
+// ====== Setup / login ======
+function loadCfg() {
+  try {
+    const raw = localStorage.getItem(CFG_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+function saveCfg(c) { localStorage.setItem(CFG_KEY, JSON.stringify(c)); }
+function clearCfg() { localStorage.removeItem(CFG_KEY); }
+
+async function tryLoginWith(apiUrl, pw) {
+  cfg = { apiUrl, pw };
+  const j = await api('me');
+  return j;
+}
+
+async function init() {
+  cfg = loadCfg();
+  if (!cfg) {
+    showSetup();
+    return;
+  }
+  try {
+    const me = await api('me');
+    currentUser = me;
+    showApp();
+  } catch (e) {
+    showSetup(e.message);
+  }
+}
+
+function showSetup(errMsg) {
+  $('app').style.display = 'none';
+  $('setup').style.display = 'flex';
+  if (cfg) {
+    $('setup-url').value = cfg.apiUrl || '';
+    $('setup-pw').value = cfg.pw || '';
+  }
+  $('setup-err').textContent = errMsg || '';
+}
+
+async function showApp() {
+  $('setup').style.display = 'none';
+  $('app').style.display = 'block';
+  $('me-name').textContent = currentUser.name + ' (' + currentUser.role + ')';
+  await loadJobs();
+}
+
+$('setup-go').onclick = async function () {
+  $('setup-err').textContent = '';
+  const url = $('setup-url').value.trim();
+  const pw = $('setup-pw').value;
+  if (!url || !pw) { $('setup-err').textContent = '兩格都要填'; return; }
+  try {
+    const me = await tryLoginWith(url, pw);
+    saveCfg(cfg);
+    currentUser = me;
+    showApp();
+  } catch (e) {
+    $('setup-err').textContent = '登入失敗：' + e.message;
+  }
+};
+
+$('btn-logout').onclick = function () {
+  clearCfg();
+  cfg = null; currentUser = null;
+  showSetup();
+};
+$('btn-settings').onclick = function () { showSetup(); };
+
+// ====== Jobs ======
+async function loadJobs() {
+  const container = $('job-list-container');
+  container.innerHTML = '<div style="font-size:12px;color:#888">載入中…</div>';
+  try {
+    const r = await api('listJobs');
+    container.innerHTML = '';
+    if (!r.jobs.length) {
+      container.appendChild(el('div', { style: 'font-size:12px;color:#888' }, '尚無職缺。按上面 + 開始。'));
+      return;
+    }
+    for (const j of r.jobs) {
+      const item = el('div', {
+        class: 'job-item' + (currentJobId === j.id ? ' active' : ''),
+        onclick: function () { selectJob(j.id); },
+      }, [
+        el('div', null, j.title),
+        el('div', { class: 'meta' }, j.status + ' · ' + (j.scoring_rubric_version ? 'v' + j.scoring_rubric_version : '')),
+      ]);
+      container.appendChild(item);
+    }
+  } catch (e) {
+    container.innerHTML = '<div style="color:#d93025;font-size:12px">' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function selectJob(id) {
+  currentJobId = id;
+  await loadJobs(); // refresh sidebar active state
+  await loadJobDetail();
+}
+
+async function loadJobDetail() {
+  const ws = $('workspace');
+  ws.innerHTML = '<div class="empty"><p>載入中…</p></div>';
+  try {
+    const [jobR, candsR, rubricR] = await Promise.all([
+      api('getJob', { id: currentJobId }),
+      api('listCandidates', { job_id: currentJobId }),
+      api('getRubric', { job_id: currentJobId }),
+    ]);
+    currentJob = jobR.job;
+    renderJobDetail(jobR.job, jobR.stats, candsR.candidates, rubricR);
+  } catch (e) {
+    ws.innerHTML = '<div class="empty"><p style="color:#d93025">' + escHtml(e.message) + '</p></div>';
+  }
+}
+
+function renderJobDetail(job, stats, candidates, rubricData) {
+  const ws = $('workspace');
+  ws.innerHTML = '';
+
+  // Header
+  ws.appendChild(el('div', { class: 'job-header' }, [
+    el('div', null, [
+      el('h2', null, job.title),
+      el('div', { class: 'meta' }, [
+        el('span', null, '狀態：' + job.status),
+        el('span', null, '候選人 ' + stats.candidate_count),
+        el('span', null, 'Rubric v' + (job.scoring_rubric_version || 1)),
+      ]),
+    ]),
+  ]));
+
+  // JD section (collapsible)
+  const jdSection = el('div', { class: 'section collapsible collapsed' });
+  jdSection.appendChild(el('h3', {
+    onclick: function () { jdSection.classList.toggle('collapsed'); },
+  }, '完整 JD'));
+  jdSection.appendChild(el('div', { class: 'body' }, [el('pre', null, job.jd_text || '(尚未產生)')]));
+  ws.appendChild(jdSection);
+
+  // Filter section
+  const filterSection = el('div', { class: 'section' });
+  filterSection.appendChild(el('h3', null, 'Sales Nav 搜尋條件'));
+  const filterBody = el('div', null, [
+    el('div', null, [el('span', { class: 'chip' }, '地區'), document.createTextNode(' ' + (job.filter_geography || '—'))]),
+    el('div', { style: 'margin-top:6px' }, [el('span', { class: 'chip' }, '職稱'), document.createTextNode(' ' + (job.filter_titles || '—'))]),
+    el('div', { style: 'margin-top:6px' }, [el('span', { class: 'chip' }, '產業'), document.createTextNode(' ' + (job.filter_industries || '—'))]),
+    el('div', { style: 'margin-top:6px' }, [el('span', { class: 'chip' }, '關鍵字'), document.createTextNode(' ' + (job.filter_keywords || '—'))]),
+  ]);
+  filterSection.appendChild(filterBody);
+  ws.appendChild(filterSection);
+
+  // Candidates
+  const candSection = el('div', { class: 'section' });
+  candSection.appendChild(el('h3', null, [
+    document.createTextNode('候選人'),
+    el('span', { class: 'right' }, '共 ' + candidates.length + ' 人'),
+  ]));
+  if (!candidates.length) {
+    candSection.appendChild(el('div', { class: 'empty', style: 'margin:30px 0' }, [
+      el('p', null, '尚無候選人。'),
+      el('p', { style: 'font-size:12px' }, '使用 Chrome Extension 在 Sales Nav 抓取後會自動進來。'),
+    ]));
+  } else {
+    const list = el('div', { class: 'cand-list' });
+    const sorted = candidates.slice().sort(function (a, b) { return (b.score || 0) - (a.score || 0); });
+    for (const c of sorted) list.appendChild(renderCandidate(c));
+    candSection.appendChild(list);
+  }
+  ws.appendChild(candSection);
+
+  // Rubric panel
+  const rubricSection = el('div', { class: 'section' });
+  rubricSection.appendChild(el('h3', null, [
+    document.createTextNode('評分準則 & 跟 AI 對話'),
+    el('span', { class: 'right' }, 'v' + (rubricData.version || 1)),
+  ]));
+  rubricSection.appendChild(renderRubricArea(rubricData));
+  ws.appendChild(rubricSection);
+}
+
+function renderCandidate(c) {
+  const score = parseInt(c.score, 10) || 0;
+  const stars = Math.round(score / 20);
+  const starStr = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+
+  const flags = [];
+  if (c.dashboard_has_record === 'yes' || c.dashboard_has_record === true) {
+    flags.push(el('span', { class: 'cand-flag warn' }, '⚠️ 招募系統有紀錄' + (c.dashboard_last_contact_at ? '：' + c.dashboard_last_contact_at : '')));
+  }
+  if (c.email) flags.push(el('span', { class: 'cand-flag good' }, '✉️ ' + c.email));
+
+  const status = c.status || 'new';
+  const statusLabel = { new: '新', shortlisted: '可聯繫', contacted: '已聯繫', responded: '有回應', rejected: '不適合', handed_off: '已送出' }[status] || status;
+
+  const cardCls = 'cand status-' + status;
+
+  const actions = el('div', { class: 'cand-actions' });
+  if (status === 'new' || status === 'rejected') {
+    actions.appendChild(el('button', { class: 'ok', onclick: function () { setStatus(c.id, 'shortlisted'); } }, '✓ 可聯繫'));
+  }
+  if (status === 'new' || status === 'shortlisted') {
+    actions.appendChild(el('button', { class: 'bad', onclick: function () { setStatus(c.id, 'rejected'); } }, '✗ 不適合'));
+  }
+  if (status === 'shortlisted') {
+    actions.appendChild(el('button', { onclick: function () { setStatus(c.id, 'contacted'); } }, '已寄信'));
+  }
+  if (status === 'contacted') {
+    actions.appendChild(el('button', { onclick: function () { setStatus(c.id, 'responded'); } }, '有回應'));
+  }
+  actions.appendChild(el('button', { class: 'tellai', onclick: function () { tellAi(c); } }, '💬 對 AI 說評分不對'));
+
+  return el('div', { class: cardCls }, [
+    el('div', { class: 'cand-top' }, [
+      el('div', { class: 'cand-info' }, [
+        el('div', { class: 'cand-name' }, [
+          c.linkedin_url
+            ? el('a', { href: c.linkedin_url, target: '_blank' }, c.name)
+            : document.createTextNode(c.name),
+          ' ',
+          el('span', { class: 'cand-status-pill ' + status }, statusLabel),
+        ]),
+        el('div', { class: 'cand-sub' }, (c.current_title || '—') + ' @ ' + (c.current_company || '—') + ' · ' + (c.tenure_role || '—') + ' · ' + (c.location || '—')),
+      ]),
+      el('div', { class: 'stars' }, [
+        document.createTextNode(starStr),
+        el('span', { class: 'num' }, score + '/100'),
+      ]),
+    ]),
+    c.score_reason ? el('div', { class: 'cand-reason' }, c.score_reason) : null,
+    flags.length ? el('div', { class: 'cand-flags' }, flags) : null,
+    actions,
+  ]);
+}
+
+function renderRubricArea(data) {
+  const wrap = el('div', { class: 'rubric-area' });
+
+  // Left: feedback chat
+  const left = el('div', null, [
+    el('div', { style: 'font-size:12px;color:#5f6368;margin-bottom:6px' }, '💬 跟 AI 說：哪裡評不對 / 補什麼條件'),
+    (function () {
+      const ta = el('textarea', { class: 'feedback-input', id: 'feedback-input', placeholder: '例：ariana 那家 TBI MOTION 是純機械業，不要因為公司名有 TECHNOLOGY 就加分' });
+      return ta;
+    })(),
+    el('div', { class: 'btn-row' }, [
+      el('button', { class: 'btn btn-primary', id: 'feedback-send', onclick: sendFeedback }, '送出 → AI 更新評分準則'),
+      el('button', { class: 'btn btn-warn', id: 'rescore-btn', onclick: rescoreAll }, '重算所有候選人'),
+    ]),
+    el('div', { id: 'feedback-history-wrap' }, [
+      el('div', { style: 'font-size:11px;color:#5f6368;margin-top:14px' }, '歷史回饋'),
+      (function () {
+        const list = el('div', { class: 'history-list', id: 'feedback-history' });
+        if (data.history && data.history.length) {
+          for (const h of data.history) {
+            list.appendChild(el('div', { class: 'history-item' }, [
+              el('div', { class: 'when' }, (h.created_at || '').slice(0, 19).replace('T', ' ')),
+              document.createTextNode(h.feedback_text || ''),
+            ]));
+          }
+        } else {
+          list.appendChild(el('div', { class: 'history-item' }, '尚無回饋'));
+        }
+        return list;
+      })(),
+    ]),
+  ]);
+
+  // Right: rubric editor
+  const right = el('div', null, [
+    el('div', { style: 'font-size:12px;color:#5f6368;margin-bottom:6px' }, '目前評分準則（可直接編輯）'),
+    el('textarea', { id: 'rubric-edit' }, data.rubric || ''),
+    el('div', { class: 'btn-row' }, [
+      el('button', { class: 'btn btn-ghost', onclick: saveRubricEdit }, '儲存手動編輯'),
+    ]),
+  ]);
+
+  wrap.appendChild(left);
+  wrap.appendChild(right);
+  return wrap;
+}
+
+// ====== Actions ======
+async function setStatus(candidateId, status) {
+  try {
+    await apiPost('updateCandidateStatus', { id: candidateId, status: status });
+    toast('狀態已更新');
+    await loadJobDetail();
+  } catch (e) {
+    toast('失敗：' + e.message, true);
+  }
+}
+
+let _aiContextCandidate = null;
+function tellAi(c) {
+  _aiContextCandidate = c;
+  const ta = $('feedback-input');
+  if (ta) {
+    ta.value = '針對 ' + c.name + '（評分 ' + c.score + ' 分）：';
+    ta.focus();
+    ta.scrollIntoView({ block: 'center' });
+  }
+}
+
+async function sendFeedback() {
+  const ta = $('feedback-input');
+  const text = ta.value.trim();
+  if (!text) { toast('請先打字'); return; }
+  const btn = $('feedback-send');
+  btn.classList.add('loading'); btn.disabled = true;
+  btn.textContent = 'AI 正在更新準則…';
+  try {
+    const body = { job_id: currentJobId, feedback_text: text };
+    if (_aiContextCandidate) body.referenced_candidate_id = _aiContextCandidate.id;
+    await apiPost('refineRubric', body);
+    toast('評分準則已更新（要重算才會改影響候選人分數）');
+    ta.value = '';
+    _aiContextCandidate = null;
+    await loadJobDetail();
+  } catch (e) {
+    toast('失敗：' + e.message, true);
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+    btn.textContent = '送出 → AI 更新評分準則';
+  }
+}
+
+async function saveRubricEdit() {
+  const ta = $('rubric-edit');
+  if (!ta) return;
+  if (!confirm('要把整段 rubric 覆蓋成你編輯的版本嗎？（之後的評分都會用這個版本）')) return;
+  try {
+    await apiPost('updateRubric', { job_id: currentJobId, rubric: ta.value });
+    toast('Rubric 已存（要重算才會改影響候選人分數）');
+    await loadJobDetail();
+  } catch (e) {
+    toast('失敗：' + e.message, true);
+  }
+}
+
+async function rescoreAll() {
+  if (!confirm('用目前的評分準則，重算這個職缺所有候選人？')) return;
+  const btn = $('rescore-btn');
+  btn.classList.add('loading'); btn.disabled = true;
+  btn.textContent = '重算中…';
+  try {
+    const r = await apiPost('rescoreAll', { job_id: currentJobId });
+    toast('重算完成：' + r.scored_count + ' 人' + (r.failed ? '（失敗 ' + r.failed + '）' : ''));
+    await loadJobDetail();
+  } catch (e) {
+    toast('失敗：' + e.message, true);
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+    btn.textContent = '重算所有候選人';
+  }
+}
+
+// ====== New job modal ======
+$('new-job-btn').onclick = function () {
+  $('new-job-modal').style.display = 'flex';
+  $('new-job-brief').value = '';
+  $('new-job-err').textContent = '';
+  setTimeout(function () { $('new-job-brief').focus(); }, 50);
+};
+$('new-job-cancel').onclick = function () { $('new-job-modal').style.display = 'none'; };
+$('new-job-submit').onclick = async function () {
+  const brief = $('new-job-brief').value.trim();
+  if (!brief) { $('new-job-err').textContent = '請輸入職務輪廓'; return; }
+  const btn = $('new-job-submit');
+  btn.classList.add('loading'); btn.disabled = true;
+  $('new-job-err').textContent = '';
+  try {
+    const r = await apiPost('createJob', { brief: brief });
+    $('new-job-modal').style.display = 'none';
+    toast('職缺已建立');
+    currentJobId = r.id;
+    await loadJobs();
+    await loadJobDetail();
+  } catch (e) {
+    $('new-job-err').textContent = '失敗：' + e.message;
+  } finally {
+    btn.classList.remove('loading'); btn.disabled = false;
+  }
+};
+
+// ====== Boot ======
+init();
+</script>
+</body>
+</html>
