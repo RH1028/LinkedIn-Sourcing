@@ -54,6 +54,16 @@ function handleRequest(e, method) {
         return jsonResponse(apiListCandidates(user, payload));
       case 'upsertCandidates':
         return jsonResponse(apiUpsertCandidates(user, payload));
+      case 'updateCandidateStatus':
+        return jsonResponse(apiUpdateCandidateStatus(user, payload));
+      case 'getRubric':
+        return jsonResponse(apiGetRubric(user, payload));
+      case 'refineRubric':
+        return jsonResponse(apiRefineRubric(user, payload));
+      case 'updateRubric':
+        return jsonResponse(apiUpdateRubric(user, payload));
+      case 'rescoreAll':
+        return jsonResponse(apiRescoreAll(user, payload));
       default:
         return jsonResponse({ ok: false, error: 'unknown action: ' + action });
     }
@@ -347,4 +357,207 @@ function llmScoreCandidate(rubric, candidate) {
     score: Math.max(0, Math.min(100, score)),
     reason: String(obj.reason || ''),
   };
+}
+
+// ====================================================================
+// Update helpers — patch a single row by id
+// ====================================================================
+
+function updateJobRow(jobId, updates) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Jobs');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idIdx = headers.indexOf('id');
+  for (let r = 1; r < data.length; r++) {
+    if (data[r][idIdx] === jobId) {
+      for (const key in updates) {
+        const colIdx = headers.indexOf(key);
+        if (colIdx >= 0) sheet.getRange(r + 1, colIdx + 1).setValue(updates[key]);
+      }
+      return;
+    }
+  }
+  throw new Error('job not found: ' + jobId);
+}
+
+function updateCandidateRow(candidateId, updates) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Candidates');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idIdx = headers.indexOf('id');
+  for (let r = 1; r < data.length; r++) {
+    if (data[r][idIdx] === candidateId) {
+      for (const key in updates) {
+        const colIdx = headers.indexOf(key);
+        if (colIdx >= 0) sheet.getRange(r + 1, colIdx + 1).setValue(updates[key]);
+      }
+      return;
+    }
+  }
+  throw new Error('candidate not found: ' + candidateId);
+}
+
+// ====================================================================
+// Candidate status
+// ====================================================================
+
+function apiUpdateCandidateStatus(user, payload) {
+  requireRole(user, 'editor');
+  if (!payload.id) throw new Error('id is required');
+  if (!payload.status) throw new Error('status is required');
+  updateCandidateRow(payload.id, {
+    status: payload.status,
+    marked_by: user.account,
+    marked_at: nowIso(),
+    updated_at: nowIso(),
+  });
+  return { ok: true };
+}
+
+// ====================================================================
+// Rubric: get / refine (LLM) / update (manual edit) / rescore all
+// ====================================================================
+
+function apiGetRubric(user, payload) {
+  const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
+  if (!job) throw new Error('job not found');
+  if (user.role !== 'admin' && job.owner_account !== user.account) {
+    throw new Error('forbidden');
+  }
+  const history = readSheet('RubricFeedback')
+    .filter(function (f) { return f.job_id === payload.job_id; })
+    .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
+  return {
+    ok: true,
+    rubric: job.scoring_rubric,
+    version: job.scoring_rubric_version,
+    updated_at: job.scoring_rubric_updated_at,
+    history: history,
+  };
+}
+
+function apiRefineRubric(user, payload) {
+  requireRole(user, 'editor');
+  if (!payload.feedback_text) throw new Error('feedback_text is required');
+  const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
+  if (!job) throw new Error('job not found');
+
+  const rubricBefore = job.scoring_rubric || '';
+  let candidateContext = '';
+  if (payload.referenced_candidate_id) {
+    const c = readSheet('Candidates').find(function (x) { return x.id === payload.referenced_candidate_id; });
+    if (c) {
+      candidateContext = '\n\n（這條回饋是針對候選人 ' + c.name + '，職稱 ' + c.current_title +
+        '，公司 ' + c.current_company + '，目前評分 ' + c.score + ' 分，原評分理由：' + c.score_reason + '）';
+    }
+  }
+
+  const rubricAfter = llmRefineRubric(rubricBefore, payload.feedback_text, candidateContext);
+  const newVersion = (parseInt(job.scoring_rubric_version, 10) || 1) + 1;
+  const now = nowIso();
+
+  updateJobRow(payload.job_id, {
+    scoring_rubric: rubricAfter,
+    scoring_rubric_version: newVersion,
+    scoring_rubric_updated_at: now,
+    updated_at: now,
+  });
+
+  appendToSheet('RubricFeedback', {
+    id: genId('fb'),
+    job_id: payload.job_id,
+    user_account: user.account,
+    feedback_text: payload.feedback_text,
+    referenced_candidate_id: payload.referenced_candidate_id || '',
+    rubric_before: rubricBefore,
+    rubric_after: rubricAfter,
+    created_at: now,
+  });
+
+  return { ok: true, rubric_before: rubricBefore, rubric_after: rubricAfter, version: newVersion };
+}
+
+function apiUpdateRubric(user, payload) {
+  requireRole(user, 'editor');
+  if (payload.rubric === undefined) throw new Error('rubric is required');
+  const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
+  if (!job) throw new Error('job not found');
+
+  const rubricBefore = job.scoring_rubric || '';
+  const newVersion = (parseInt(job.scoring_rubric_version, 10) || 1) + 1;
+  const now = nowIso();
+
+  updateJobRow(payload.job_id, {
+    scoring_rubric: payload.rubric,
+    scoring_rubric_version: newVersion,
+    scoring_rubric_updated_at: now,
+    updated_at: now,
+  });
+
+  appendToSheet('RubricFeedback', {
+    id: genId('fb'),
+    job_id: payload.job_id,
+    user_account: user.account,
+    feedback_text: '(manual edit)',
+    referenced_candidate_id: '',
+    rubric_before: rubricBefore,
+    rubric_after: payload.rubric,
+    created_at: now,
+  });
+
+  return { ok: true, version: newVersion };
+}
+
+function apiRescoreAll(user, payload) {
+  requireRole(user, 'editor');
+  const job = readSheet('Jobs').find(function (j) { return j.id === payload.job_id; });
+  if (!job) throw new Error('job not found');
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Candidates');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const jobIdIdx = headers.indexOf('job_id');
+  const scoreIdx = headers.indexOf('score');
+  const reasonIdx = headers.indexOf('score_reason');
+  const versionIdx = headers.indexOf('score_rubric_version');
+  const updatedAtIdx = headers.indexOf('updated_at');
+
+  let scored = 0;
+  let failed = 0;
+  for (let r = 1; r < data.length; r++) {
+    if (data[r][jobIdIdx] !== payload.job_id) continue;
+    const candidate = {};
+    headers.forEach(function (h, i) { candidate[h] = data[r][i]; });
+    try {
+      const s = llmScoreCandidate(job.scoring_rubric, candidate);
+      sheet.getRange(r + 1, scoreIdx + 1).setValue(s.score);
+      sheet.getRange(r + 1, reasonIdx + 1).setValue(s.reason);
+      sheet.getRange(r + 1, versionIdx + 1).setValue(job.scoring_rubric_version);
+      sheet.getRange(r + 1, updatedAtIdx + 1).setValue(nowIso());
+      scored++;
+    } catch (err) {
+      failed++;
+    }
+  }
+  return { ok: true, scored_count: scored, failed: failed };
+}
+
+// ====================================================================
+// LLM: rubric refinement
+// ====================================================================
+
+function llmRefineRubric(currentRubric, feedback, candidateContext) {
+  const prompt =
+    '你是招募評分顧問。下面是「目前的評分準則」和「使用者剛給的回饋」。\n' +
+    '請根據回饋，產出「新版評分準則」。\n\n' +
+    '原則：\n' +
+    '- 保留沒被質疑、仍合理的條目\n' +
+    '- 修正、刪除、或新增條目以反映 feedback\n' +
+    '- 保持「列點、看得懂、可直接拿來打分」的格式\n' +
+    '- 只回新版評分準則本文，不要前後說明文字、不要解釋改了什麼\n\n' +
+    '目前評分準則：\n' + (currentRubric || '(尚未設定)') + '\n\n' +
+    '使用者回饋：' + feedback + (candidateContext || '') + '\n\n' +
+    '直接輸出新版評分準則：';
+
+  return callClaude(prompt, { maxTokens: 2000, temperature: 0.3 });
 }
