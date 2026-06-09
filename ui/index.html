@@ -120,10 +120,7 @@ main.workspace { padding: 24px 32px; overflow-y: auto; max-height: calc(100vh - 
 .cand-status-pill.contacted { background: #fff3e0; color: #e65100; }
 .cand-status-pill.rejected { background: #fce8e6; color: var(--danger); }
 
-/* ---- Rubric chat ---- */
-.rubric-area { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 1000px) { .rubric-area { grid-template-columns: 1fr; } }
-.feedback-input { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; }
+/* ---- Buttons ---- */
 .btn { padding: 8px 14px; border: 0; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-primary { background: var(--primary); color: white; }
 .btn-primary:hover { background: var(--primary-dark); }
@@ -146,6 +143,19 @@ main.workspace { padding: 24px 32px; overflow-y: auto; max-height: calc(100vh - 
 .modal textarea { width: 100%; min-height: 160px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical; }
 .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 .modal .err { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
+.field-label { display: block; font-size: 12px; color: var(--text-muted); margin-top: 14px; margin-bottom: 4px; font-weight: 600; }
+.field-label .req { color: var(--danger); margin-left: 3px; }
+.field-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical; }
+.field-input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+/* ---- Asset section (JD / filter / rubric) 三個各自獨立 ---- */
+.asset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1000px) { .asset-grid { grid-template-columns: 1fr; } }
+.asset-col-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.asset-edit { width: 100%; min-height: 180px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.6; resize: vertical; }
+.asset-chat { width: 100%; min-height: 90px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; }
+.filter-url-line { font-size: 12px; margin: 8px 0; word-break: break-all; }
+.filter-url-line a { color: var(--primary); }
 
 .toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -203,12 +213,30 @@ main.workspace { padding: 24px 32px; overflow-y: auto; max-height: calc(100vh - 
 <div id="new-job-modal" class="modal-back" style="display:none">
   <div class="modal">
     <h2>新增職缺</h2>
-    <p class="desc">輸入你心中的「職務輪廓」（簡短即可），AI 會自動產出完整 JD、LinkedIn 搜尋條件、評分準則。</p>
-    <textarea id="new-job-brief" placeholder="例：資深人才招募，5 年以上經驗，要有科技軟體業招募背景、AI Agent 工具使用經驗、從 0 到 1 招募專案落地，加分項：能 vibe coding 做 AI workflow"></textarea>
+    <p class="desc">填這 4 樣，AI 會自動產出「完整 JD、LinkedIn 搜尋條件、評分準則」三樣成品，之後每樣都能再跟 AI 對話修改。</p>
+
+    <label class="field-label">職務名稱<span class="req">*</span></label>
+    <input id="new-job-title" class="field-input" placeholder="例：資深人才招募專員">
+
+    <label class="field-label">職級<span class="req">*</span></label>
+    <select id="new-job-level" class="field-input">
+      <option value="Middle">Middle</option>
+      <option value="Senior">Senior</option>
+      <option value="Lead">Lead</option>
+      <option value="Manager">Manager</option>
+      <option value="C-Level">C-Level</option>
+    </select>
+
+    <label class="field-label">參考 JD（可不填）</label>
+    <textarea id="new-job-refjd" class="field-input" style="min-height:90px" placeholder="如果你手上有現成的 JD，貼進來給 AI 當風格與內容範本"></textarea>
+
+    <label class="field-label">職務關鍵<span class="req">*</span></label>
+    <textarea id="new-job-brief" class="field-input" style="min-height:110px" placeholder="用幾句話簡述這個缺的概況：要找什麼樣的人、必備經驗、加分項。例：5 年以上招募經驗，要有科技軟體業背景、AI 工具使用經驗、從 0 到 1 招募專案落地，加分：能 vibe coding 做 AI workflow"></textarea>
+
     <div class="err" id="new-job-err"></div>
     <div class="actions">
       <button class="btn btn-ghost" id="new-job-cancel">取消</button>
-      <button class="btn btn-primary" id="new-job-submit">送出（AI 產出中需 5~15 秒）</button>
+      <button class="btn btn-primary" id="new-job-submit">送出（AI 產出中需 10~20 秒）</button>
     </div>
   </div>
 </div>
@@ -387,53 +415,59 @@ async function loadJobDetail() {
   const ws = $('workspace');
   ws.innerHTML = '<div class="empty"><p>載入中…</p></div>';
   try {
-    const [jobR, candsR, rubricR] = await Promise.all([
+    const [jobR, candsR, assetsR] = await Promise.all([
       api('getJob', { id: currentJobId }),
       api('listCandidates', { job_id: currentJobId }),
-      api('getRubric', { job_id: currentJobId }),
+      api('getJobAssets', { job_id: currentJobId }),
     ]);
     currentJob = jobR.job;
-    renderJobDetail(jobR.job, jobR.stats, candsR.candidates, rubricR);
+    renderJobDetail(jobR.job, jobR.stats, candsR.candidates, assetsR);
   } catch (e) {
     ws.innerHTML = '<div class="empty"><p style="color:#d93025">' + escHtml(e.message) + '</p></div>';
   }
 }
 
-function renderJobDetail(job, stats, candidates, rubricData) {
+function renderJobDetail(job, stats, candidates, assetsR) {
   const ws = $('workspace');
   ws.innerHTML = '';
+  const assets = assetsR.assets || {};
+  const history = assetsR.history || {};
 
   // Header
   ws.appendChild(el('div', { class: 'job-header' }, [
     el('div', null, [
       el('h2', null, job.title),
       el('div', { class: 'meta' }, [
+        el('span', null, '職級：' + (job.level || '—')),
         el('span', null, '狀態：' + job.status),
         el('span', null, '候選人 ' + stats.candidate_count),
-        el('span', null, 'Rubric v' + (job.scoring_rubric_version || 1)),
+        el('span', null, '評分準則 v' + (job.scoring_rubric_version || 1)),
       ]),
     ]),
   ]));
 
-  // JD section (collapsible)
-  const jdSection = el('div', { class: 'section collapsible collapsed' });
-  jdSection.appendChild(el('h3', {
-    onclick: function () { jdSection.classList.toggle('collapsed'); },
-  }, '完整 JD'));
-  jdSection.appendChild(el('div', { class: 'body' }, [el('pre', null, job.jd_text || '(尚未產生)')]));
-  ws.appendChild(jdSection);
+  // 三個 AI 產出，各自獨立（A 方案）
+  ws.appendChild(renderAssetSection('jd', {
+    title: '完整 JD',
+    editLabel: '目前 JD（可直接編輯）',
+    chatLabel: '💬 跟 AI 說 JD 要怎麼改',
+    chatPlaceholder: '例：工作內容強調國際團隊、加分條件加上「有 ATS 導入經驗」',
+  }, assets.jd || {}, history.jd || []));
 
-  // Filter section
-  const filterSection = el('div', { class: 'section' });
-  filterSection.appendChild(el('h3', null, 'Sales Nav 搜尋條件'));
-  const filterBody = el('div', null, [
-    el('div', null, [el('span', { class: 'chip' }, '地區'), document.createTextNode(' ' + (job.filter_geography || '—'))]),
-    el('div', { style: 'margin-top:6px' }, [el('span', { class: 'chip' }, '職稱'), document.createTextNode(' ' + (job.filter_titles || '—'))]),
-    el('div', { style: 'margin-top:6px' }, [el('span', { class: 'chip' }, '產業'), document.createTextNode(' ' + (job.filter_industries || '—'))]),
-    el('div', { style: 'margin-top:6px' }, [el('span', { class: 'chip' }, '關鍵字'), document.createTextNode(' ' + (job.filter_keywords || '—'))]),
-  ]);
-  filterSection.appendChild(filterBody);
-  ws.appendChild(filterSection);
+  ws.appendChild(renderAssetSection('filter', {
+    title: 'LinkedIn 搜尋條件',
+    editLabel: '目前搜尋條件（可直接編輯）',
+    chatLabel: '💬 跟 AI 說搜尋條件要怎麼改',
+    chatPlaceholder: '例：擴大到外商、排除 RPO 公司、職稱加上 Talent Partner',
+  }, assets.filter || {}, history.filter || []));
+
+  ws.appendChild(renderAssetSection('rubric', {
+    title: '評分準則',
+    editLabel: '目前評分準則（可直接編輯）',
+    chatLabel: '💬 跟 AI 說：哪裡評不對 / 補什麼條件',
+    chatPlaceholder: '例：ariana 那家是純機械業，不要因為公司名有 TECHNOLOGY 就加分',
+    extraButtons: [{ label: '重算所有候選人', cls: 'btn-warn', onclick: rescoreAll, id: 'rescore-btn' }],
+  }, assets.rubric || {}, history.rubric || []));
 
   // Candidates
   const candSection = el('div', { class: 'section' });
@@ -444,7 +478,7 @@ function renderJobDetail(job, stats, candidates, rubricData) {
   if (!candidates.length) {
     candSection.appendChild(el('div', { class: 'empty', style: 'margin:30px 0' }, [
       el('p', null, '尚無候選人。'),
-      el('p', { style: 'font-size:12px' }, '使用 Chrome Extension 在 Sales Nav 抓取後會自動進來。'),
+      el('p', { style: 'font-size:12px' }, '使用 Chrome Extension 在 LinkedIn 抓取後會自動進來。'),
     ]));
   } else {
     const list = el('div', { class: 'cand-list' });
@@ -453,15 +487,75 @@ function renderJobDetail(job, stats, candidates, rubricData) {
     candSection.appendChild(list);
   }
   ws.appendChild(candSection);
+}
 
-  // Rubric panel
-  const rubricSection = el('div', { class: 'section' });
-  rubricSection.appendChild(el('h3', null, [
-    document.createTextNode('評分準則 & 跟 AI 對話'),
-    el('span', { class: 'right' }, 'v' + (rubricData.version || 1)),
+// 一個 AI 產出的區塊：標題 + 左(手動編輯) + 右(AI 對話 + 歷史)
+function renderAssetSection(target, cfg, asset, history) {
+  const section = el('div', { class: 'section' });
+  const headChildren = [document.createTextNode(cfg.title)];
+  const verStr = target === 'rubric' && asset.version ? ('v' + asset.version) : '';
+  if (verStr) headChildren.push(el('span', { class: 'right' }, verStr));
+  section.appendChild(el('h3', null, headChildren));
+
+  const grid = el('div', { class: 'asset-grid' });
+
+  // 左：手動編輯
+  const editId = 'edit-' + target;
+  const leftChildren = [
+    el('div', { class: 'asset-col-label' }, cfg.editLabel),
+    el('textarea', { class: 'asset-edit', id: editId }, asset.text || ''),
+  ];
+  // filter 多一行：可點開的搜尋網址
+  if (target === 'filter') {
+    const urlLine = el('div', { class: 'filter-url-line', id: 'filter-url-line' });
+    if (asset.url) {
+      urlLine.appendChild(el('a', { href: asset.url, target: '_blank' }, '🔗 在 LinkedIn 開啟這個搜尋'));
+    } else {
+      urlLine.appendChild(document.createTextNode('（尚無搜尋網址）'));
+    }
+    leftChildren.push(urlLine);
+  }
+  leftChildren.push(el('div', { class: 'btn-row' }, [
+    el('button', { class: 'btn btn-ghost', onclick: function () { saveAssetEdit(target); } }, '儲存手動編輯'),
   ]));
-  rubricSection.appendChild(renderRubricArea(rubricData));
-  ws.appendChild(rubricSection);
+  const left = el('div', null, leftChildren);
+
+  // 右：AI 對話 + 歷史
+  const chatId = 'fb-' + target;
+  const sendId = 'fb-send-' + target;
+  const btnRow = el('div', { class: 'btn-row' }, [
+    el('button', { class: 'btn btn-primary', id: sendId, onclick: function () { sendAssetFeedback(target); } }, '送出 → AI 改寫'),
+  ]);
+  if (cfg.extraButtons) {
+    for (const b of cfg.extraButtons) {
+      btnRow.appendChild(el('button', { class: 'btn ' + (b.cls || 'btn-ghost'), id: b.id || '', onclick: b.onclick }, b.label));
+    }
+  }
+
+  const histList = el('div', { class: 'history-list', id: 'hist-' + target });
+  if (history && history.length) {
+    for (const h of history) {
+      histList.appendChild(el('div', { class: 'history-item' }, [
+        el('div', { class: 'when' }, (h.created_at || '').slice(0, 19).replace('T', ' ')),
+        document.createTextNode(h.feedback_text || ''),
+      ]));
+    }
+  } else {
+    histList.appendChild(el('div', { class: 'history-item' }, '尚無修改紀錄'));
+  }
+
+  const right = el('div', null, [
+    el('div', { class: 'asset-col-label' }, cfg.chatLabel),
+    el('textarea', { class: 'asset-chat', id: chatId, placeholder: cfg.chatPlaceholder }),
+    btnRow,
+    el('div', { style: 'font-size:11px;color:#5f6368;margin-top:14px' }, '修改歷史'),
+    histList,
+  ]);
+
+  grid.appendChild(left);
+  grid.appendChild(right);
+  section.appendChild(grid);
+  return section;
 }
 
 function renderCandidate(c) {
@@ -518,53 +612,6 @@ function renderCandidate(c) {
   ]);
 }
 
-function renderRubricArea(data) {
-  const wrap = el('div', { class: 'rubric-area' });
-
-  // Left: feedback chat
-  const left = el('div', null, [
-    el('div', { style: 'font-size:12px;color:#5f6368;margin-bottom:6px' }, '💬 跟 AI 說：哪裡評不對 / 補什麼條件'),
-    (function () {
-      const ta = el('textarea', { class: 'feedback-input', id: 'feedback-input', placeholder: '例：ariana 那家 TBI MOTION 是純機械業，不要因為公司名有 TECHNOLOGY 就加分' });
-      return ta;
-    })(),
-    el('div', { class: 'btn-row' }, [
-      el('button', { class: 'btn btn-primary', id: 'feedback-send', onclick: sendFeedback }, '送出 → AI 更新評分準則'),
-      el('button', { class: 'btn btn-warn', id: 'rescore-btn', onclick: rescoreAll }, '重算所有候選人'),
-    ]),
-    el('div', { id: 'feedback-history-wrap' }, [
-      el('div', { style: 'font-size:11px;color:#5f6368;margin-top:14px' }, '歷史回饋'),
-      (function () {
-        const list = el('div', { class: 'history-list', id: 'feedback-history' });
-        if (data.history && data.history.length) {
-          for (const h of data.history) {
-            list.appendChild(el('div', { class: 'history-item' }, [
-              el('div', { class: 'when' }, (h.created_at || '').slice(0, 19).replace('T', ' ')),
-              document.createTextNode(h.feedback_text || ''),
-            ]));
-          }
-        } else {
-          list.appendChild(el('div', { class: 'history-item' }, '尚無回饋'));
-        }
-        return list;
-      })(),
-    ]),
-  ]);
-
-  // Right: rubric editor
-  const right = el('div', null, [
-    el('div', { style: 'font-size:12px;color:#5f6368;margin-bottom:6px' }, '目前評分準則（可直接編輯）'),
-    el('textarea', { id: 'rubric-edit' }, data.rubric || ''),
-    el('div', { class: 'btn-row' }, [
-      el('button', { class: 'btn btn-ghost', onclick: saveRubricEdit }, '儲存手動編輯'),
-    ]),
-  ]);
-
-  wrap.appendChild(left);
-  wrap.appendChild(right);
-  return wrap;
-}
-
 // ====== Actions ======
 async function setStatus(candidateId, status) {
   try {
@@ -576,10 +623,11 @@ async function setStatus(candidateId, status) {
   }
 }
 
+// 候選人卡片的「對 AI 說評分不對」→ 把焦點帶到評分準則的對話框並預填
 let _aiContextCandidate = null;
 function tellAi(c) {
   _aiContextCandidate = c;
-  const ta = $('feedback-input');
+  const ta = $('fb-rubric');
   if (ta) {
     ta.value = '針對 ' + c.name + '（評分 ' + c.score + ' 分）：';
     ta.focus();
@@ -587,36 +635,41 @@ function tellAi(c) {
   }
 }
 
-async function sendFeedback() {
-  const ta = $('feedback-input');
+const ASSET_LABEL = { jd: 'JD', filter: '搜尋條件', rubric: '評分準則' };
+
+// 送出對某個產出的修改意見 → AI 改寫
+async function sendAssetFeedback(target) {
+  const ta = $('fb-' + target);
   const text = ta.value.trim();
   if (!text) { toast('請先打字'); return; }
-  const btn = $('feedback-send');
+  const btn = $('fb-send-' + target);
   btn.classList.add('loading'); btn.disabled = true;
-  btn.textContent = 'AI 正在更新準則…';
+  const orig = btn.textContent;
+  btn.textContent = 'AI 改寫中…';
   try {
-    const body = { job_id: currentJobId, feedback_text: text };
-    if (_aiContextCandidate) body.referenced_candidate_id = _aiContextCandidate.id;
-    await apiPost('refineRubric', body);
-    toast('評分準則已更新（要重算才會改影響候選人分數）');
+    const body = { job_id: currentJobId, target: target, feedback_text: text };
+    if (target === 'rubric' && _aiContextCandidate) body.referenced_candidate_id = _aiContextCandidate.id;
+    await apiPost('refineAsset', body);
+    toast(ASSET_LABEL[target] + '已由 AI 更新' + (target === 'rubric' ? '（要按「重算」才會影響候選人分數）' : ''));
     ta.value = '';
-    _aiContextCandidate = null;
+    if (target === 'rubric') _aiContextCandidate = null;
     await loadJobDetail();
   } catch (e) {
     toast('失敗：' + e.message, true);
   } finally {
     btn.classList.remove('loading'); btn.disabled = false;
-    btn.textContent = '送出 → AI 更新評分準則';
+    btn.textContent = orig;
   }
 }
 
-async function saveRubricEdit() {
-  const ta = $('rubric-edit');
+// 手動覆蓋某個產出
+async function saveAssetEdit(target) {
+  const ta = $('edit-' + target);
   if (!ta) return;
-  if (!confirm('要把整段 rubric 覆蓋成你編輯的版本嗎？（之後的評分都會用這個版本）')) return;
+  if (!confirm('要把「' + ASSET_LABEL[target] + '」整段覆蓋成你編輯的版本嗎？')) return;
   try {
-    await apiPost('updateRubric', { job_id: currentJobId, rubric: ta.value });
-    toast('Rubric 已存（要重算才會改影響候選人分數）');
+    await apiPost('updateAsset', { job_id: currentJobId, target: target, text: ta.value });
+    toast(ASSET_LABEL[target] + '已存' + (target === 'rubric' ? '（要按「重算」才會影響候選人分數）' : ''));
     await loadJobDetail();
   } catch (e) {
     toast('失敗：' + e.message, true);
@@ -643,19 +696,26 @@ async function rescoreAll() {
 // ====== New job modal ======
 $('new-job-btn').onclick = function () {
   $('new-job-modal').style.display = 'flex';
+  $('new-job-title').value = '';
+  $('new-job-level').value = 'Senior';
+  $('new-job-refjd').value = '';
   $('new-job-brief').value = '';
   $('new-job-err').textContent = '';
-  setTimeout(function () { $('new-job-brief').focus(); }, 50);
+  setTimeout(function () { $('new-job-title').focus(); }, 50);
 };
 $('new-job-cancel').onclick = function () { $('new-job-modal').style.display = 'none'; };
 $('new-job-submit').onclick = async function () {
+  const title = $('new-job-title').value.trim();
+  const level = $('new-job-level').value;
+  const referenceJd = $('new-job-refjd').value.trim();
   const brief = $('new-job-brief').value.trim();
-  if (!brief) { $('new-job-err').textContent = '請輸入職務輪廓'; return; }
+  if (!title) { $('new-job-err').textContent = '請填職務名稱'; return; }
+  if (!brief) { $('new-job-err').textContent = '請填職務關鍵'; return; }
   const btn = $('new-job-submit');
   btn.classList.add('loading'); btn.disabled = true;
   $('new-job-err').textContent = '';
   try {
-    const r = await apiPost('createJob', { brief: brief });
+    const r = await apiPost('createJob', { title: title, level: level, reference_jd: referenceJd, brief: brief });
     $('new-job-modal').style.display = 'none';
     toast('職缺已建立');
     currentJobId = r.id;

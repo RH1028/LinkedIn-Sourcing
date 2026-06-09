@@ -38,20 +38,22 @@
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | `id` | string | `job_` 前綴 + ULID |
-| `owner_account` | string | FK → `Users.account`，誰負責這個 job |
-| `title` | string | 職缺名稱 |
-| `brief` | text | 使用者一開始輸入的「職務輪廓」原文（建立用） |
-| `jd_text` | text | AI 產出的完整 JD（使用者可編） |
-| `filter_geography` | string | 例：`Taiwan` |
-| `filter_titles` | string | 逗號分隔，例：`Recruiter,Talent Acquisition Specialist` |
-| `filter_industries` | string | 逗號分隔，例：`Software Development,IT Services` |
-| `filter_keywords` | string | 自由文字 |
-| `filter_url` | string | 對應的 Sales Nav URL |
-| `scoring_rubric` | text | **AI 產出的評分準則文字（可學習）**；初版由 brief 推導，每次 feedback 會被改寫 |
+| `title` | string | **使用者填**：職務名稱（手填） |
+| `level` | enum | **使用者填**：職級 `Middle`/`Senior`/`Lead`/`Manager`/`C-Level` |
+| `reference_jd` | text | **使用者填**（可選）：既有 JD，給 AI 當風格與內容範本 |
+| `brief` | text | **使用者填**：職務關鍵（簡述職務概況），AI 產出三樣成品的核心依據 |
+| `jd_text` | text | **AI 產出 1**：完整 JD（title/工作內容/必要條件/加分條件），可對話修改＋手動編輯 |
+| `jd_updated_at` | datetime | |
+| `filter_text` | text | **AI 產出 2**：LinkedIn 搜尋條件（純文字），可對話修改＋手動編輯 |
+| `filter_url` | string | 由 `filter_text` 派生的 LinkedIn 搜尋網址 |
+| `filter_updated_at` | datetime | |
+| `scoring_rubric` | text | **AI 產出 3**：評分準則文字；初版由上面輸入推導，每次 feedback 會被改寫 |
 | `scoring_rubric_version` | int | 從 1 開始，每次更新 +1 |
 | `scoring_rubric_updated_at` | datetime | |
 | `status` | enum | `draft` / `active` / `paused` / `closed` |
 | `created_at` / `updated_at` | datetime | |
+
+> 已移除 `owner_account`（共用工作區、無單一負責人）與結構化的 `filter_geography/titles/industries/keywords`（改由 AI 從 brief 直接推導搜尋脈絡）。
 
 ### `Candidates` 分頁
 
@@ -84,17 +86,18 @@
 
 **Unique constraint：** `(job_id, linkedin_url)` 不重複。
 
-### `RubricFeedback` 分頁（評分準則的對話歷史）
+### `JobFeedback` 分頁（三個產出的對話與手動編輯歷史）
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | `id` | string | `fb_` + ULID |
 | `job_id` | string | FK → `Jobs.id` |
+| `target` | enum | 這次改的是哪個產出：`jd` / `filter` / `rubric` |
 | `user_account` | string | 誰給的 feedback |
-| `feedback_text` | text | 使用者說的話原文（例：「Alice 評太高，她沒 AI 經驗」） |
-| `referenced_candidate_id` | string | 若 feedback 是針對特定候選人，記下來；否則空 |
-| `rubric_before` | text | 改前的 `scoring_rubric` 完整內容（快照） |
-| `rubric_after` | text | 改後的 `scoring_rubric` 完整內容（快照） |
+| `feedback_text` | text | 使用者說的話原文；手動編輯則記 `(manual edit)` |
+| `referenced_candidate_id` | string | 若 feedback 針對特定候選人（只有 rubric 用），否則空 |
+| `before_text` | text | 改前的該產出完整內容（快照） |
+| `after_text` | text | 改後的該產出完整內容（快照） |
 | `created_at` | datetime | |
 
 ### `ScheduleConfig` 分頁
@@ -141,8 +144,7 @@
 |---|---|---|---|---|
 | GET | `?action=listJobs&pw=` | user+ | — | `{ ok, jobs }` |
 | GET | `?action=getJob&pw=&id=` | user+ | — | `{ ok, job, stats }` |
-| POST | `?action=createJob&pw=` | user+ | `{ brief }` | `{ ok, id, jd_text, filter_*, scoring_rubric }` — **後端 call LLM 產 JD + filter + rubric** |
-| POST | `?action=updateJob&pw=` | user+ | `{ id, ...partial }` | `{ ok }` |
+| POST | `?action=createJob&pw=` | user+ | `{ title, level, reference_jd?, brief }` | `{ ok, id, job }` — **後端 call LLM 從 4 欄產 jd_text + filter_text/url + scoring_rubric** |
 
 ### Candidates
 
@@ -153,14 +155,16 @@
 | POST | `?action=updateCandidateStatus&pw=` | user+ | `{ id, status, note? }` | `{ ok }` |
 | POST | `?action=handoffCandidate&pw=` | user+ | `{ id }` | `{ ok, dashboard_response }` |
 
-### Rubric（AI 評分準則學習）
+### Assets（jd / filter / rubric 三個 AI 產出，皆可對話與手動編輯）
 
 | Method | Endpoint | 角色 | Payload | 回應 |
 |---|---|---|---|---|
-| GET | `?action=getRubric&pw=&job_id=` | user+ | — | `{ ok, rubric, version, history: RubricFeedback[] }` |
-| POST | `?action=refineRubric&pw=` | user+ | `{ job_id, feedback_text, referenced_candidate_id? }` | `{ ok, rubric_before, rubric_after, version }` — **call LLM 把 feedback 吃進去、更新 rubric、寫 RubricFeedback** |
-| POST | `?action=updateRubric&pw=` | user+ | `{ job_id, rubric }` | `{ ok, version }` — **使用者手動編 rubric** |
+| GET | `?action=getJobAssets&pw=&job_id=` | user+ | — | `{ ok, assets:{ jd, filter, rubric }, history:{ jd[], filter[], rubric[] } }` |
+| POST | `?action=refineAsset&pw=` | user+ | `{ job_id, target:'jd'\|'filter'\|'rubric', feedback_text, referenced_candidate_id? }` | `{ ok, target, before_text, after_text, url?, version? }` — **call LLM 依意見改寫該產出、寫 JobFeedback** |
+| POST | `?action=updateAsset&pw=` | user+ | `{ job_id, target, text }` | `{ ok, target, version? }` — **使用者手動覆蓋該產出** |
 | POST | `?action=rescoreAll&pw=` | user+ | `{ job_id }` | `{ ok, scored_count }` — **用最新 rubric 重算所有候選人** |
+
+> 舊動作 `getRubric` / `refineRubric` / `updateRubric` 仍可用（後端轉接到上面的泛用 endpoint，向後相容）。
 
 ### Schedule
 

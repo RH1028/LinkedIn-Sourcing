@@ -12,8 +12,13 @@ const SHEET_SCHEMA = {
     'account', 'password', 'role', 'name', 'active', 'created_at',
   ],
   Jobs: [
-    'id', 'owner_account', 'title', 'brief', 'jd_text',
-    'filter_geography', 'filter_titles', 'filter_industries', 'filter_keywords', 'filter_url',
+    // 使用者填的 4 欄
+    'id', 'title', 'level', 'reference_jd', 'brief',
+    // AI 產出 1：JD
+    'jd_text', 'jd_updated_at',
+    // AI 產出 2：LinkedIn 搜尋條件（filter_text 可編輯、filter_url 由它派生）
+    'filter_text', 'filter_url', 'filter_updated_at',
+    // AI 產出 3：評分準則
     'scoring_rubric', 'scoring_rubric_version', 'scoring_rubric_updated_at',
     'status', 'created_at', 'updated_at',
   ],
@@ -26,9 +31,10 @@ const SHEET_SCHEMA = {
     'status', 'marked_by', 'marked_at', 'handed_off_at',
     'created_at', 'updated_at',
   ],
-  RubricFeedback: [
-    'id', 'job_id', 'user_account', 'feedback_text',
-    'referenced_candidate_id', 'rubric_before', 'rubric_after', 'created_at',
+  // 三個 AI 產出（jd / filter / rubric）的對話與手動編輯歷史都記在這
+  JobFeedback: [
+    'id', 'job_id', 'target', 'user_account', 'feedback_text',
+    'referenced_candidate_id', 'before_text', 'after_text', 'created_at',
   ],
   ScheduleConfig: [
     'owner_account', 'daily_cap', 'window_start_hour', 'window_end_hour',
